@@ -4,3 +4,4 @@ cchardet
 aiohttp[speedups]
 Pillow
 qrcode
+pyzbar
