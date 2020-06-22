@@ -1,0 +1,6 @@
+aiogram
+uvloop
+cchardet
+aiohttp[speedups]
+Pillow
+qrcode
