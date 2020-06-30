@@ -4,6 +4,7 @@
 
 #region configEncuesta
 from ConectorEncuesta import verificarVoto,ConexionEncuesta,jsonDireccionPregunta
+from ConectorAssets import ConexionAssets
 from aiogram.utils.callback_data import CallbackData
 from aiogram.utils import executor
 from aiogram.types import ParseMode
@@ -71,6 +72,7 @@ def decodeQr(buf):
 
 
 API_TOKEN = ''
+RedStellar = False
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN,parse_mode=types.ParseMode.HTML)
@@ -170,6 +172,31 @@ class FormularioMultignature(StatesGroup):
 
 #endregion
 
+#region FormularioAssets
+class FormularioAssetsMenu(StatesGroup):
+    seleccionMenuAssets= State()
+
+class FormularioAgregarAssets(StatesGroup):
+    aceptacionTerminos = State()
+    codigoAssets = State()
+    direccionEmisor = State()
+
+class FormularioCrearAssets(StatesGroup):
+    aceptacionTerminos = State()
+    nombreAssets = State()
+    cantidadAssets = State()
+
+
+class FormularioPagoAssets(StatesGroup):
+    direcion = State()
+    codigoAssets = State()
+    montoAssets = State()
+    aceptacionAssets =State ()
+#    precesoPagoAssets = ()
+
+#endregion
+
+
 #region TecladosChatGrupal
 def dar_keyboardPrincipalGrupo() -> types.ReplyKeyboardMarkup:
     keyboard_markup = types.ReplyKeyboardMarkup(row_width=2)
@@ -201,7 +228,7 @@ def dar_keyboardSettings() -> types.ReplyKeyboardMarkup:
 
 def dar_keyboardMenuPrincipal() -> types.ReplyKeyboardMarkup:
     keyboard_markup = types.ReplyKeyboardMarkup(row_width=2)
-    btn_texto = (_('⬇️Receive'), _('⬆️Pay'), _('📊 Balance'), _('🛠 Settings'))
+    btn_texto = (_('⬇️Receive'), _('⬆️Pay'), _('📊 Balance'), _('🛠 Settings'),('💵 Assets'))
     keyboard_markup.add(*(types.KeyboardButton(text) for text in btn_texto))
     return keyboard_markup
 
@@ -231,6 +258,14 @@ def dar_keyboardCancelacion() -> types.ReplyKeyboardMarkup:
     keyboard_markup = types.ReplyKeyboardMarkup()
     keyboard_markup.add(types.KeyboardButton('Cancel'))
     return keyboard_markup
+
+
+def dar_keyboardAssets()-> types.ReplyKeyboardMarkup:
+    keyboard_markup = types.ReplyKeyboardMarkup(row_width=2)
+    btn_texto = ('back','⏬ Add Assets' ,'📄 Create Assets','⏫ Pay Assets','🗒 List of assets created')
+    keyboard_markup.add(*(types.KeyboardButton(text) for text in btn_texto))
+    return keyboard_markup
+
 #endregion
 
 
@@ -305,9 +340,9 @@ async def eco(message: types.Message):
         if message.text == "⬆️Pay" or message.text == "Pago":
             tmpConexion = Conexion()
             resultado = tmpConexion.misDatos(message.from_user.id)
-            tmpStellar = Stellar(pLlave=resultado[1], sLlave=resultado[2], horizon=False)
+            tmpStellar = Stellar(pLlave=resultado[1], sLlave=resultado[2], horizon=RedStellar)
             balance = tmpStellar.balance()
-            if balance > 1:
+            if balance[0]:
                 await Form.direccion.set()
                 await message.answer("Enter the address to pay (Qr Photo or text):",reply_markup=dar_keyboardCancelacion())
             else:
@@ -315,13 +350,13 @@ async def eco(message: types.Message):
         elif message.text == "📊 Balance" or message.text == "Saldo":
             tmpConexion = Conexion()
             resultado = tmpConexion.misDatos(message.from_user.id)
-            tmpStellar = Stellar(pLlave=resultado[1], sLlave=resultado[2],horizon=False)
+            tmpStellar = Stellar(pLlave=resultado[1], sLlave=resultado[2],horizon=RedStellar)
             balance = tmpStellar.balance()
-            if balance == 0:
-                await message.answer("Your address does not have the required minimum lumens \ n Deposit 1 lumen")
+            if balance[0]:
+                await message.answer(balance[1])
             else:
-                mensaje = "Balance: "+ str(balance)
-                await message.answer(mensaje)
+                await message.answer("Your address does not have the required minimum lumens \ n Deposit 1 lumen")
+
         elif message.text == "⬇️Receive" or message.text == "Recibir":
             tmpConexion = Conexion()
             resultado = tmpConexion.misDatos(message.from_user.id)
@@ -340,6 +375,9 @@ async def eco(message: types.Message):
             await Ajustes.exportar.set()
             await message.answer("🕒",reply_markup=dar_keyboardSettings())
 
+        elif message.text == "💵 Assets":
+            await FormularioAssetsMenu.seleccionMenuAssets.set()
+            await message.answer("🕒",reply_markup=dar_keyboardAssets())
         else:
             await message.reply("❌ invalid command",reply_markup=dar_keyboardMenuPrincipal())
     # endregion
@@ -380,13 +418,12 @@ async def eco(message: types.Message):
                         await message.reply("Welcome to a payment survey\n"
                                             "Enter the address to make payment(Text or Photo)",reply_markup=dar_keyboardCancelarMaquina())
                 elif message.text == "Balance":
-                    tmpStellar = Stellar(pLlave=tmpResultado[1], sLlave=tmpResultado[2], horizon=False)
+                    tmpStellar = Stellar(pLlave=tmpResultado[1], sLlave=tmpResultado[2], horizon=RedStellar)
                     balance = tmpStellar.balance()
-                    if balance == 0:
-                        await message.answer("Your address does not have the required minimum lumens \ n Deposit 1 lumen")
+                    if balance[0]:
+                        await message.answer(balance[1])
                     else:
-                        mensaje = "Balance: " + str(balance)
-                        await message.answer(mensaje)
+                        await message.answer("Your address does not have the required minimum lumens \ n Deposit 1 lumen")
                 else:
                     await message.reply("Error command Invalid",reply_markup=dar_keyboardPrincipalGrupo())
             elif message.text =="Receive":
@@ -549,7 +586,7 @@ async def process_aceptacion(message: types.Message, state: FSMContext):
 
     if data['memoAceptacion'] == "NULO":
         if message.text == "Accept":
-            tmpStellar  = Stellar(pLlave=resultado[1],sLlave=resultado[2],horizon=False)
+            tmpStellar  = Stellar(pLlave=resultado[1],sLlave=resultado[2],horizon=RedStellar)
             pago = tmpStellar.pagoSinMemo(Destino=data['direccion'],monto=data['monto'])
             if pago[0]:
                 await message.answer("Successful Payment 🚀",reply_markup=dar_keyboardMenuPrincipal())
@@ -563,7 +600,7 @@ async def process_aceptacion(message: types.Message, state: FSMContext):
                 await state.finish()
     else:
         if message.text == "Accept":
-            tmpStellar  = Stellar(pLlave=resultado[1],sLlave=resultado[2],horizon=False)
+            tmpStellar  = Stellar(pLlave=resultado[1],sLlave=resultado[2],horizon=RedStellar)
             pago = tmpStellar.pagoConMemo(Destino=data['direccion'],monto=data['monto'],memo=data['memoAceptacion'])
             if pago[0]:
                 await message.answer("Successful Payment 🚀",reply_markup=dar_keyboardMenuPrincipal())
@@ -831,6 +868,325 @@ async def query_post_vote(query: types.CallbackQuery, callback_data: dict):
 #endregion
 
 
+#region maquinaSeleccionAssets
+
+@dp.message_handler(Text(equals='Back', ignore_case=True), state=FormularioAssetsMenu)
+async def cancel_handler(message: types.Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state is None:
+        return
+    await state.finish()
+    await message.answer("⬅ Back", reply_markup=dar_keyboardMenuPrincipal())
+
+
+@dp.message_handler(state=FormularioAssetsMenu.seleccionMenuAssets)
+async def seleccion_Menu(message: types.Message, state: FSMContext):
+    if message.text == "📄 Create Assets":
+        await message.reply("Do you want to create an asset?",reply_markup=dar_keyboardSiNo())
+        await FormularioCrearAssets.aceptacionTerminos.set()
+    elif message.text == "⏬ Add Assets":
+        await message.reply("Do you want to add an asset to your main wallet?",reply_markup=dar_keyboardSiNo())
+        await FormularioAgregarAssets.aceptacionTerminos.set()
+    elif message.text == "⏫ Pay Assets":
+        await message.reply("Enter the address to be paid the Asset (Photo or Text)",reply_markup=dar_keyboardCancelarMaquina())
+        await FormularioPagoAssets.direcion.set()
+    elif message.text == "🗒 List of assets created":
+        tmpAssets = ConexionAssets()
+        datosAssets = tmpAssets.misDatos(message.from_user.id)
+        if datosAssets:
+            tmpStellar = Stellar(datosAssets[1],datosAssets[2],False)
+            resultado = tmpStellar.informacionAssets()
+            await message.answer(resultado, reply_markup=dar_keyboardAssets())
+        else:
+            await message.answer("Sorry you have not created any assets, please click the button (Create Assets)")
+    else:
+        await message.answer("Select a keyboard option",reply_markup=dar_keyboardAssets())
+#endregion
+
+
+#region maquinaAddAssets
+
+@dp.message_handler(Text(equals='Cancel', ignore_case=True), state=FormularioAgregarAssets)
+async def cancel_handler(message: types.Message, state: FSMContext):
+    await state.reset_data()
+    await FormularioAssetsMenu.seleccionMenuAssets.set()
+    await message.answer("Cancel Add Assets",reply_markup=dar_keyboardAssets())
+
+
+@dp.message_handler(state=FormularioAgregarAssets.aceptacionTerminos)
+async def paso_Aceptacion(message: types.Message, state: FSMContext):
+    if message.text == "Yes":
+        await FormularioAgregarAssets.next()
+        await message.reply("Enter the Asset Code",reply_markup=dar_keyboardCancelarMaquina())
+    elif message.text == "No":
+        await FormularioAssetsMenu.seleccionMenuAssets.set()
+        await message.answer("🕒", reply_markup=dar_keyboardAssets())
+
+    else:
+        pass
+
+
+@dp.message_handler(state=FormularioAgregarAssets.codigoAssets)
+async def paso_CodigoAssets(message: types.Message, state: FSMContext):
+    async with state.proxy() as data:
+        data['codigoAssets'] = message.text
+    await FormularioAgregarAssets.next()
+    await message.reply("Enter the issuer address of the asset(Photo or Text)",reply_markup=dar_keyboardCancelarMaquina())
+
+
+@dp.message_handler(content_types=ContentType.ANY, state=FormularioAgregarAssets.direccionEmisor)
+async def paso_direccionEmisorAssets(message: types.Message, state: FSMContext):
+    async with state.proxy() as data:
+        pass
+    codigoAsset = data['codigoAssets']
+
+    if message.content_type == ContentType.PHOTO:
+        file_id = message.photo[0].file_id
+        file = await bot.get_file(file_id)
+        file_path = file.file_path
+        buf = await bot.download_file(file_path)
+        dataQr = decodeQr(buf)
+        if dataQr:
+            texto = dataQr[0][0].decode('utf-8')
+            if validarLlavePublica(texto):
+                tmpConexion = Conexion()
+                resultado = tmpConexion.misDatos(message.from_user.id)
+                tmpStellar = Stellar(resultado[1], resultado[2], False)
+                tieneAssets = tmpStellar.assetsActivo(texto,codigoAsset)
+                if tieneAssets:
+                    await message.answer("Your account already has that asset !!", reply_markup=dar_keyboardAssets())
+                    await state.reset_data()
+                    await FormularioAssetsMenu.seleccionMenuAssets.set()
+                else:
+                    respuesta = tmpStellar.agregarEmisorToken(texto, codigoAsset)
+                    if respuesta[0]:
+                        await message.answer("Asset added", reply_markup=dar_keyboardAssets())
+                        await state.reset_data()
+                        await FormularioAssetsMenu.seleccionMenuAssets.set()
+                    else:
+                        await message.answer("Failed to add your asset", reply_markup=dar_keyboardAssets())
+                        await state.reset_data()
+                        await FormularioAssetsMenu.seleccionMenuAssets.set()
+            else:
+                await message.answer("Invalid stellar address\n Try again or cancel")
+        else:
+            buf.close()
+            await Form.direccion.set()
+            await message.reply("Invalid QR Try again or Cancel")
+    elif message.content_type == ContentType.TEXT:
+        if validarLlavePublica(message.text):
+            tmpConexion = Conexion()
+            resultado = tmpConexion.misDatos(message.from_user.id)
+            tmpStellar = Stellar(resultado[1],resultado[2],False)
+            tieneAssets = tmpStellar.assetsActivo(codigoAsset)
+            if tieneAssets:
+                await message.answer("Your account already has that asset !!", reply_markup=dar_keyboardAssets())
+                await state.reset_data()
+                await FormularioAssetsMenu.seleccionMenuAssets.set()
+            else:
+                respuesta = tmpStellar.agregarEmisorToken(message.text,codigoAsset)
+                if respuesta[0]:
+                    await message.answer("Asset added", reply_markup=dar_keyboardAssets())
+                    await state.reset_data()
+                    await FormularioAssetsMenu.seleccionMenuAssets.set()
+                else:
+                    await message.answer("Failed to add your asset", reply_markup=dar_keyboardAssets())
+                    await state.reset_data()
+                    await FormularioAssetsMenu.seleccionMenuAssets.set()
+        else:
+            await message.answer("Invalid stellar address\n Try again or cancel")
+    else:
+        pass
+
+
+
+#endregion
+
+#region maquinaCrearAssets
+
+@dp.message_handler(Text(equals='Cancel', ignore_case=True), state=FormularioCrearAssets)
+async def cancel_handler(message: types.Message, state: FSMContext):
+    await state.reset_data()
+    await FormularioAssetsMenu.seleccionMenuAssets.set()
+    await message.answer("Creation of Canceled Asset !!",reply_markup=dar_keyboardAssets())
+
+
+
+@dp.message_handler(content_types=ContentType.ANY, state=FormularioCrearAssets.aceptacionTerminos)
+async def paso_Aceptacion(message: types.Message, state: FSMContext):
+    if message.text == "Yes":
+        tmpConexion = ConexionAssets()
+        datos = tmpConexion.misDatos(message.from_user.id)
+        if datos:
+            tmpStellar = Stellar(datos[1], datos[2], horizon=RedStellar)
+            balance = tmpStellar.balance()
+            if balance[0]:
+                await FormularioCrearAssets.next()
+                await message.reply("Enter the asset code", reply_markup=dar_keyboardCancelarMaquina())
+            else:
+                await FormularioAssetsMenu.seleccionMenuAssets.set()
+                imgQr = darQrBuffer(datos[1])
+                await FormularioAssetsMenu.seleccionMenuAssets.set()
+                await message.answer_photo(imgQr.getvalue(), "Enter balance into your asset creation wallet to continue the process",
+                                           reply_markup=dar_keyboardAssets())
+        else:
+            tmpConexion.insertarUsuario(message.from_user.id)
+            direccion = tmpConexion.misDatos(message.from_user.id)
+            imgQr = darQrBuffer(direccion[1])
+            await FormularioAssetsMenu.seleccionMenuAssets.set()
+            await message.answer_photo(imgQr.getvalue(), "Enter balance into your asset creation wallet to continue the process.",
+                                       reply_markup=dar_keyboardAssets())
+    elif message.text == "No":
+        await FormularioAssetsMenu.seleccionMenuAssets.set()
+        await message.answer("🕒", reply_markup=dar_keyboardAssets())
+    else:
+        await message.answer("Select a keyboard option",reply_markup=dar_keyboardSiNo())
+
+
+@dp.message_handler(content_types=ContentType.ANY, state=FormularioCrearAssets.nombreAssets)
+async def paso_nombreAssets(message: types.Message, state: FSMContext):
+    async with state.proxy() as data:
+        data['codigoAssets'] = message.text
+    await FormularioCrearAssets.next()
+    await message.answer("Enter the amount of assets to create",reply_markup=dar_keyboardCancelarMaquina())
+
+@dp.message_handler(content_types=ContentType.ANY, state=FormularioCrearAssets.cantidadAssets)
+async def paso_cantidadAssets(message: types.Message, state: FSMContext):
+    async with state.proxy() as data:
+        pass
+    codigoAssets = data['codigoAssets']
+    tmpConAssets = ConexionAssets()
+    tmpConNormal = Conexion()
+    datosEmisor = tmpConNormal.misDatos(message.from_user.id)
+    datosAssets = tmpConAssets.misDatos(message.from_user.id)
+    tmpStellar = Stellar(datosAssets[1],datosAssets[2],False)
+    resultado = tmpStellar.crearAssets(codigoAssets,message.text,datosEmisor[1])
+    if resultado[0]:
+        await FormularioAssetsMenu.seleccionMenuAssets.set()
+        await state.reset_data()
+        await message.answer("Asset create",reply_markup=dar_keyboardAssets())
+    else:
+        await FormularioAssetsMenu.seleccionMenuAssets.set()
+        await state.reset_data()
+        await message.answer("Sorry Asset not created", reply_markup=dar_keyboardAssets())
+
+
+#endregion
+
+
+#region maquinaPagoAssets
+@dp.message_handler(Text(equals='Cancel', ignore_case=True), state=FormularioPagoAssets)
+async def cancel_handler(message: types.Message, state: FSMContext):
+    await state.reset_data()
+    await FormularioAssetsMenu.seleccionMenuAssets.set()
+    await message.answer("Cancel Pay Assets",reply_markup=dar_keyboardAssets())
+
+@dp.message_handler(content_types=ContentType.ANY,state=FormularioPagoAssets.direcion)
+async def paso_Direccion(message: types.Message, state: FSMContext):
+    if message.content_type == ContentType.PHOTO:
+        file_id = message.photo[0].file_id
+        file = await bot.get_file(file_id)
+        file_path = file.file_path
+        buf = await bot.download_file(file_path)
+        dataQr = decodeQr(buf)
+        if dataQr:
+            texto = dataQr[0][0].decode('utf-8')
+            if validarLlavePublica(texto):
+                async with state.proxy() as data:
+                    data['direccion'] = texto
+                buf.close()
+                tmpConexion = Conexion()
+                datos = tmpConexion.misDatos(message.from_user.id)
+                tmpStellar = Stellar(datos[1], datos[2], False)
+                resultados = tmpStellar.assetsPosibles()
+                async with state.proxy() as data:
+                    data['resultados'] = resultados
+                await FormularioPagoAssets.next()
+                await message.answer(resultados[0], reply_markup=dar_keyboardCancelarMaquina(),
+                                     parse_mode=ParseMode.MARKDOWN)
+            else:
+                await message.answer("Invalid stellar address\n Try again or cancel")
+        #            await state.finish()
+        else:
+            buf.close()
+            await message.reply("Invalid QR Try again or Cancel")
+    elif message.content_type == ContentType.TEXT:
+        if validarLlavePublica(message.text):
+            tmpConexion = Conexion()
+            datos = tmpConexion.misDatos(message.from_user.id)
+            tmpStellar = Stellar(datos[1],datos[2],False)
+            resultados = tmpStellar.assetsPosibles()
+            async with state.proxy() as data:
+                data['direccion'] = message.text
+                data['resultados'] = resultados
+            await FormularioPagoAssets.next()
+            await message.answer(resultados[0],reply_markup=dar_keyboardCancelarMaquina(),parse_mode=ParseMode.MARKDOWN)
+        else:
+            await message.answer("Invalid stellar address\n Try again or cancel")
+
+@dp.message_handler(state=FormularioPagoAssets.codigoAssets)
+async def paso_codigoAssets(message: types.Message, state: FSMContext):
+    try:
+        async with state.proxy() as data:
+            pass
+        numero = int(message.text)
+        if numero < int(data['resultados'][2]):
+            async with state.proxy() as data:
+                data["indiceAssets"]= numero
+                await FormularioPagoAssets.next()
+                await message.answer("Enter Amount:")
+        else:
+            await message.answer("Select a number from the list of the asset to pay")
+    except:
+        await message.answer("Select a number from the list of the asset to pay")
+
+
+@dp.message_handler(state=FormularioPagoAssets.montoAssets)
+async def paso_montoAssets(message: types.Message, state: FSMContext):
+    async with state.proxy() as data:
+        data['monto'] = message.text
+    await FormularioPagoAssets.next()
+    index = int(data['indiceAssets'])
+    await bot.send_message(
+            message.chat.id,
+            md.text(
+                md.text('You want to make this payment!!'),
+                md.text('Payment address:', md.bold(data['direccion'])),
+                md.text('Asset Code:', md.code(data['resultados'][1][index][0])),
+                md.text('Asset Issuer:', md.code(data['resultados'][1][index][1])),
+                md.text('Amount:',md.code(data['monto'])),
+                sep='\n',
+            ),
+            reply_markup=dar_keyboardSiNo(),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+@dp.message_handler(state=FormularioPagoAssets.aceptacionAssets)
+async def paso_aceptacionAssets(message: types.Message, state: FSMContext):
+    if message.text == "Yes":
+        async with state.proxy() as data:
+            pass
+        tmpConexion = Conexion()
+        datos = tmpConexion.misDatos(message.from_user.id)
+        tmpStellar = Stellar(datos[1],datos[2],False)
+        index = int(data['indiceAssets'])
+        estadoPago = tmpStellar.pagoAssets(data['direccion'],data['monto'],data['resultados'][1][index][0],data['resultados'][1][index][1])
+        if estadoPago[0]:
+            await state.reset_data()
+            await FormularioAssetsMenu.seleccionMenuAssets.set()
+            await message.answer("Successful Pay Assets", reply_markup=dar_keyboardAssets())
+        else:
+            await state.reset_data()
+            await FormularioAssetsMenu.seleccionMenuAssets.set()
+            await message.answer("Error Pay Assets", reply_markup=dar_keyboardAssets())
+    elif message.text == "No":
+        await state.reset_data()
+        await FormularioAssetsMenu.seleccionMenuAssets.set()
+        await message.answer("Cancel Pay Assets", reply_markup=dar_keyboardAssets())
+
+
+
+#endregion
 
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True)
