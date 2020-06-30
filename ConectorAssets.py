@@ -5,7 +5,7 @@ class ConexionAssets:
     def __init__(self,db='billeteras.db'):
         self.conexion = sqlite3.connect(db)
 
-    def crearTablaUsuarios(self):
+    def crearTablaBilleteraActivos(self):
         c = self.conexion.cursor()
         c.execute('''CREATE TABLE billeterasAssets
                      (idTelegram real,pllave text,sllave text)''')
