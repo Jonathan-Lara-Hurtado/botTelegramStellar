@@ -592,7 +592,6 @@ async def process_aceptacion(message: types.Message, state: FSMContext):
                 await message.answer("Successful Payment 🚀",reply_markup=dar_keyboardMenuPrincipal())
                 await state.finish()
             else:
-                print(pago[1])
                 await message.answer("Failed Payment ‼️", reply_markup=dar_keyboardMenuPrincipal())
                 await message.answer("📍 Possible mistakes:"
                                      "\n📌 without internet connection"
