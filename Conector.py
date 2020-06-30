@@ -1,7 +1,7 @@
 import sqlite3
 from stellar_sdk import Keypair, Server, exceptions,Account,TransactionBuilder,Network,Signer
 import qrcode
-
+from aiogram import md
 
 
 class Stellar:
@@ -20,12 +20,60 @@ class Stellar:
         try:
             server = Server(horizon_url=self.Horizon_url)
             cuenta = server.accounts().account_id(pLlave).call()
-            tmpBalance = 0
-            for balance in cuenta['balances']:
-                tmpBalance = balance['balance']
+            resultado = []
+            texto = "Balances:\n"
+            if len(cuenta['balances']) >1:
+                for balance in cuenta['balances']:
+                    if balance['asset_type'] == 'native':
+                        texto += ("XML = "+str(balance['balance']))
+                    else:
+                        texto += (str(balance['asset_code'])+" = "+str(balance['balance'])+"\n")
+            else:
+                texto += "XLM ="+str(cuenta['balances'][0]['balance'])
+
+            resultado.append(True)
+            resultado.append(texto)
+            return resultado
         except exceptions.NotFoundError:
-            tmpBalance = 0
-        return float(tmpBalance)
+            texto = "su cuenta no esta activa"
+            return [False,texto]
+
+    def informacionAssets(self):
+        pLlave = self.pLlave
+        try:
+            texto = "Assets\n➖➖➖➖➖➖➖➖➖➖➖➖➖➖\n"
+            #asset_issuer=""
+            server = Server(horizon_url=self.Horizon_url)
+            cuenta = server.accounts().account_id(pLlave).call()
+            for i in cuenta['balances']:
+                if i['asset_type'] != "native":
+                    asset_issuer = i['asset_issuer']
+                    texto += ("Asset Code:"+i['asset_code']+"\n")
+                    texto += ("Limit:"+i['limit']+"\n")
+                    Assets = server.assets().for_code(i['asset_code']).for_issuer(asset_issuer).call()
+                    for e in Assets['_embedded']['records']:
+                        texto += ("Amount:"+str(e['amount']))
+                        texto += ("\nNum Accounts:"+str(e['num_accounts']))
+                        texto +=("\n➖➖➖➖➖➖➖➖➖➖➖➖➖➖\n")
+            return texto
+        except:
+            print("error")
+            return "error"
+
+    def assetsActivo(self,direccionEmisor,codigo):
+        pLlave = self.pLlave
+        try:
+            server = Server(horizon_url=self.Horizon_url)
+            cuenta = server.accounts().account_id(pLlave).call()
+            resultado = False
+            for balance in cuenta['balances']:
+                if balance['asset_type'] != 'native':
+                    if balance['asset_code'] == codigo and balance['asset_issuer'] == direccionEmisor:
+                        resultado = True
+        except exceptions.NotFoundError:
+            return resultado
+
+        return resultado
 
     def verificarCuentaActivada(self,destino):
         server = Server(horizon_url=self.Horizon_url)
@@ -34,7 +82,6 @@ class Stellar:
             return [True, transactions]
         except exceptions.NotFoundError as e:
             return [False, e]
-
 
     def pagoSinMemo(self,Destino,monto):
         validarCuenta = self.verificarCuentaActivada(destino=Destino)
@@ -79,7 +126,6 @@ class Stellar:
             except exceptions.BadRequestError as d:
                 return [False, d]
 
-
     def configurarBilleteraPrimeraVez(self,listaUsuarios,umbralLista):
         server = Server(horizon_url=self.Horizon_url)
         root_keypair = Keypair.from_secret(self.sLlave)
@@ -107,6 +153,72 @@ class Stellar:
             return [False, d]
         except exceptions.NotFoundError as n:
             return [False,n]
+
+    def assetsPosibles(self):
+        pLlave = self.pLlave
+        try:
+            AssetsPosibles = []
+            server = Server(horizon_url=self.Horizon_url)
+            cuenta = server.accounts().account_id(pLlave).call()
+            #Assets no creados por el
+            for i in cuenta['balances']:
+                if i['asset_type'] != 'native':
+                    AssetsPosibles.append((i['asset_code'],i['asset_issuer']))
+            # Assets no creados por el
+            try:
+                Assets = server.assets().for_issuer(pLlave).call()
+
+                for e in Assets['_embedded']['records']:
+                    if not self.busqueda(AssetsPosibles,e['asset_code'],e['asset_issuer']):
+                        AssetsPosibles.append((e['asset_code'],e['asset_issuer']))
+            except:
+                pass
+
+            texto = md.text(md.bold("Seleccione un numero Assets:")) + "\n➖➖➖➖➖➖➖➖➖➖➖➖➖➖\n"
+            contador = 0
+            for i in AssetsPosibles:
+                texto += (md.text(md.bold(str(contador))) + ". Assets Code: " + md.text(
+                    md.code(str(i[0]))) + "\n   Asset Issuer:" + md.text(md.code(str(i[1]))) + "\n")
+                texto += ("\n➖➖➖➖➖➖➖➖➖➖➖➖➖➖\n")
+                contador += 1
+
+            return [texto, AssetsPosibles, contador]
+        except:
+            print("error")
+            return []
+
+
+    def busqueda(self,l,codigo,asset_issuer):
+        existe = False
+        for i in l:
+            if i[0] == codigo and i[1] == asset_issuer:
+                existe = True
+        return existe
+
+
+    def pagoAssets(self,Destino,monto,codigo,asset_usuario):
+        server = Server(horizon_url=self.Horizon_url)
+        root_keypair = Keypair.from_secret(self.sLlave)
+        root_account = server.load_account(account_id=root_keypair.public_key)
+        base_fee = server.fetch_base_fee()
+        transaction = TransactionBuilder(
+            source_account=root_account,
+            network_passphrase=self.networkTrabajar,
+            base_fee=base_fee) \
+            .append_payment_op(  # add a payment operation to the transaction
+            destination=Destino,
+            asset_code=str(codigo),
+            amount=str(monto),
+            asset_issuer=asset_usuario) \
+            .set_timeout(30) \
+            .build()  # mark this transaction as valid only for the next 30 seconds
+        transaction.sign(root_keypair)
+        try:
+            response = server.submit_transaction(transaction)
+            return [True, response]
+        except exceptions.BadRequestError as d:
+            # print(d)
+            return [False, d]
 
 
     def pagoEncuesta(self,Destino,monto,firmantes):
@@ -158,7 +270,43 @@ class Stellar:
                 # print(d)
                 return [False, d]
 
+    def crearAssets(self,codigo,monto,emisor):
+        server = Server(horizon_url=self.Horizon_url)
+        root_keypair = Keypair.from_secret(self.sLlave)
+        root_account = server.load_account(account_id=root_keypair.public_key)
+        transaction = TransactionBuilder(
+            source_account=root_account,
+            network_passphrase=self.networkTrabajar,
+            base_fee=100).append_change_trust_op(
+            limit=monto,
+            asset_code=str(codigo),
+            asset_issuer=emisor
+        ).build()
+        transaction.sign(root_keypair)
+        try:
+            response = server.submit_transaction(transaction)
+            return [True, response]
+        except exceptions.BadRequestError as d:
+            return [False, d]
 
+    def agregarEmisorToken(self,emisor,codigo):
+        server = Server(horizon_url=self.Horizon_url)
+        root_keypair = Keypair.from_secret(self.sLlave)
+        root_account = server.load_account(account_id=root_keypair.public_key)
+        transaction = TransactionBuilder(
+            source_account=root_account,
+            network_passphrase=self.networkTrabajar,
+            base_fee=100
+        ).append_change_trust_op(
+            asset_code=str(codigo),
+            asset_issuer=emisor,
+        ).build()
+        transaction.sign(root_keypair)
+        try:
+            response = server.submit_transaction(transaction)
+            return [True, response]
+        except exceptions.BadRequestError as d:
+            return [False, d]
 
     def pagoConMemo(self,Destino,monto,memo):
         validarCuenta = self.verificarCuentaActivada(destino=Destino)
