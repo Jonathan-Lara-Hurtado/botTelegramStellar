@@ -2,7 +2,7 @@ import sqlite3
 from stellar_sdk import Keypair, Server, exceptions,Account,TransactionBuilder,Network,Signer
 import qrcode
 from aiogram import md
-
+from Encriptacion import Seguridad
 
 class Stellar:
     def __init__(self,pLlave = '', sLlave='',horizon=True):
@@ -357,7 +357,11 @@ class Conexion:
     def crearTablaUsuarios(self):
         c = self.conexion.cursor()
         c.execute('''CREATE TABLE billeteras
-                     (idTelegram real,pllave text,sllave text)''')
+                     (idTelegram real,pllave text,sllave text,CuentaEncriptada INTEGER default 0)''')
+
+    def addColumnaEncriptacion(self):
+        c = self.conexion.cursor()
+        c.execute('''ALTER TABLE billeteras ADD CuentaEncriptada INTEGER default 0''')
 
     def generarPar(self):
         keypair = Keypair.random()
@@ -379,6 +383,27 @@ class Conexion:
             for e in i:
                 lista.append(e)
         return lista
+
+    def cuentaEncriptada(self,usuario):
+        c = self.conexion.cursor()
+        query = "select CuentaEncriptada from billeteras where idTelegram="+str(usuario)
+        p = c.execute(query)
+        if p.fetchall()[0][0] == 0:
+            return False
+        else:
+            return True
+
+    def encriptarSecretKeyCuentaBD(self,usuario,contrasena):
+        tmpDatos = self.misDatos(usuario)
+        seguridad = Seguridad()
+        llaveEncriptada = seguridad.encriptarLlaveSecreta(str(contrasena),tmpDatos[2])
+        c = self.conexion.cursor()
+        query = "Update billeteras set sllave = '"+str(llaveEncriptada.decode())+"' , CuentaEncriptada=1" \
+                                                                                 " where idTelegram="+str(usuario)
+        c.execute(query)
+        self.conexion.commit()
+
+
 
 
 def validarLlavePublica(llave):
