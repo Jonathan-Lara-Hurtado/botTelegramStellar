@@ -5,6 +5,7 @@
 #region configEncuesta
 from ConectorEncuesta import verificarVoto,ConexionEncuesta,jsonDireccionPregunta
 from ConectorAssets import ConexionAssets
+from Encriptacion import Seguridad
 from aiogram.utils.callback_data import CallbackData
 from aiogram.utils import executor
 from aiogram.types import ParseMode
@@ -82,6 +83,19 @@ dp.middleware.setup(i18n)
 
 #endregion
 
+#region FormularioEncriptacion
+
+class FormularioEncriptacion(StatesGroup):
+    GuadarContrasena = State()
+    Aceptacion = State()
+
+#endregion
+
+#region FormularioDesencriptarLlave
+class FormularioDesencriptarLlave(StatesGroup):
+    GuardarLlaveEncriptada = State()
+    Desencriptar = State()
+#endregion
 
 #region FormularioCrearEncuesta
 
@@ -145,8 +159,6 @@ def formatoEncusta(post_id : int,estado : str) -> (str , types.InlineKeyboardMar
 #endregion
 
 
-
-
 #region FormulariosPrivado
 
 
@@ -156,6 +168,7 @@ class Form(StatesGroup):
     memo = State()
     memoAceptacion = State()
     aceptacion = State()
+    procesoPagoPass=State()
 
 
 class Ajustes(StatesGroup):
@@ -221,7 +234,7 @@ def dar_keyboardCancelarMaquina() -> types.ReplyKeyboardMarkup:
 #region TecladosChatPrivado
 def dar_keyboardSettings() -> types.ReplyKeyboardMarkup:
     keyboard_markup = types.ReplyKeyboardMarkup(row_width=2)
-    btn_texto = ('Back','Export')
+    btn_texto = ('Back','Export','Decrypt Wallet')
     keyboard_markup.add(*(types.KeyboardButton(text) for text in btn_texto))
     return keyboard_markup
 
@@ -337,49 +350,59 @@ async def eco(message: types.Message):
     #region Privado
 
     if message.chat.type == ChatType.PRIVATE:
-        if message.text == "⬆️Pay" or message.text == "Pago":
-            tmpConexion = Conexion()
-            resultado = tmpConexion.misDatos(message.from_user.id)
-            tmpStellar = Stellar(pLlave=resultado[1], sLlave=resultado[2], horizon=RedStellar)
-            balance = tmpStellar.balance()
-            if balance[0]:
-                await Form.direccion.set()
-                await message.answer("Enter the address to pay (Qr Photo or text):",reply_markup=dar_keyboardCancelacion())
-            else:
-                await message.answer("Unverfied account or insufficient balance")
-        elif message.text == "📊 Balance" or message.text == "Saldo":
-            tmpConexion = Conexion()
-            resultado = tmpConexion.misDatos(message.from_user.id)
-            tmpStellar = Stellar(pLlave=resultado[1], sLlave=resultado[2],horizon=RedStellar)
-            balance = tmpStellar.balance()
-            if balance[0]:
-                await message.answer(balance[1])
-            else:
-                await message.answer("Your address does not have the required minimum lumens \ n Deposit 1 lumen")
+        #aqui pregunto si antes de utilizar si su llaveSecreta se encuentra encriptada
+        tmpConexion= Conexion()
+        if tmpConexion.cuentaEncriptada(message.from_user.id):
+            if message.text == "⬆️Pay" or message.text == "Pago":
+                tmpConexion = Conexion()
+                resultado = tmpConexion.misDatos(message.from_user.id)
+                tmpStellar = Stellar(pLlave=resultado[1], sLlave=resultado[2], horizon=RedStellar)
+                balance = tmpStellar.balance()
+                if balance[0]:
+                    await Form.direccion.set()
+                    await message.answer("Enter the address to pay (Qr Photo or text):",reply_markup=dar_keyboardCancelacion())
+                else:
+                    await message.answer("Unverfied account or insufficient balance")
+            elif message.text == "📊 Balance" or message.text == "Saldo":
+                tmpConexion = Conexion()
+                resultado = tmpConexion.misDatos(message.from_user.id)
+                tmpStellar = Stellar(pLlave=resultado[1], sLlave=resultado[2],horizon=RedStellar)
+                balance = tmpStellar.balance()
+                if balance[0]:
+                    await message.answer(balance[1])
+                else:
+                    await message.answer("Your address does not have the required minimum lumens \ n Deposit 1 lumen")
 
-        elif message.text == "⬇️Receive" or message.text == "Recibir":
-            tmpConexion = Conexion()
-            resultado = tmpConexion.misDatos(message.from_user.id)
-            buf = BytesIO()
-            qr = qrcode.QRCode(version=1,
-                               error_correction=qrcode.constants.ERROR_CORRECT_L,
-                               box_size=6,
-                               border=2)
-            qr.add_data(resultado[1])
-            qr.make(fit=True)
-            img = qr.make_image(fill_color="black", back_color="white")
-            img.save(buf, "PNG")
-            textoFinal = resultado[1]
-            await message.reply_photo(buf.getvalue(), caption=textoFinal)
-        elif message.text == "🛠 Settings":
-            await Ajustes.exportar.set()
-            await message.answer("🕒",reply_markup=dar_keyboardSettings())
+            elif message.text == "⬇️Receive" or message.text == "Recibir":
+                tmpConexion = Conexion()
+                resultado = tmpConexion.misDatos(message.from_user.id)
+                buf = BytesIO()
+                qr = qrcode.QRCode(version=1,
+                                   error_correction=qrcode.constants.ERROR_CORRECT_L,
+                                   box_size=6,
+                                   border=2)
+                qr.add_data(resultado[1])
+                qr.make(fit=True)
+                img = qr.make_image(fill_color="black", back_color="white")
+                img.save(buf, "PNG")
+                textoFinal = resultado[1]
+                await message.reply_photo(buf.getvalue(), caption=textoFinal)
+            elif message.text == "🛠 Settings":
+                await Ajustes.exportar.set()
+                await message.answer("🕒",reply_markup=dar_keyboardSettings())
 
-        elif message.text == "💵 Assets":
-            await FormularioAssetsMenu.seleccionMenuAssets.set()
-            await message.answer("🕒",reply_markup=dar_keyboardAssets())
+            elif message.text == "💵 Assets":
+                await FormularioAssetsMenu.seleccionMenuAssets.set()
+                await message.answer("🕒",reply_markup=dar_keyboardAssets())
+            else:
+                await message.reply("❌ invalid command",reply_markup=dar_keyboardMenuPrincipal())
         else:
-            await message.reply("❌ invalid command",reply_markup=dar_keyboardMenuPrincipal())
+            await FormularioEncriptacion.GuadarContrasena.set()
+            await message.reply("Welcome, this is the encryption process of your secret key !!\n"
+                                "This process is used to encrypt your secret key\n"
+                                "at the end of this process only you will have access to it try not to forget it\n"
+                                "then enter a password to start encryption:\n", reply_markup=dar_keyboardCancelacion())
+
     # endregion
     elif message.chat.type == ChatType.GROUP or message.chat.type == ChatType.SUPER_GROUP:
         lista = await message.chat.get_administrators()
@@ -465,6 +488,9 @@ async def process_exportar(message: types.Message, state: FSMContext):
         os.remove(nombre)
         await message.answer("🕒",reply_markup=dar_keyboardMenuPrincipal())
         await state.finish()
+    elif message.text == "Decrypt Wallet":
+        await FormularioDesencriptarLlave.GuardarLlaveEncriptada.set()
+        await message.answer("Enter your encrypted Secret key:",reply_markup=dar_keyboardCancelarMaquina())
     elif message.text == "Back":
         await state.finish()
         await message.answer("🕒",reply_markup=dar_keyboardMenuPrincipal())
@@ -577,19 +603,26 @@ async def process_aceptacion_invalid(message: types.Message):
 
 @dp.message_handler(state=Form.aceptacion)
 async def process_aceptacion(message: types.Message, state: FSMContext):
-    async with state.proxy() as data:
-        pass
+    if message.text == "Accept":
+        await message.answer("Enter your password to unlock your wallet:",reply_markup=types.ReplyKeyboardRemove())
+        await Form.next()
 
+
+@dp.message_handler(state=Form.procesoPagoPass)
+async def process_procesoPagoPass(message: types.Message, state: FSMContext):
+    async with state.proxy() as data:
+        data['contrasena'] = message.text
+    await message.delete()
     usuario = Conexion()
     resultado = usuario.misDatos(message.from_user.id)
-
-
+    s = Seguridad()
     if data['memoAceptacion'] == "NULO":
-        if message.text == "Accept":
-            tmpStellar  = Stellar(pLlave=resultado[1],sLlave=resultado[2],horizon=RedStellar)
-            pago = tmpStellar.pagoSinMemo(Destino=data['direccion'],monto=data['monto'])
+        sllave = s.desEncriptarLlaveSecreta(data['contrasena'],resultado[2].encode())
+        if sllave != False:
+            tmpStellar = Stellar(pLlave=resultado[1], sLlave=sllave.decode(), horizon=RedStellar)
+            pago = tmpStellar.pagoSinMemo(Destino=data['direccion'], monto=data['monto'])
             if pago[0]:
-                await message.answer("Successful Payment 🚀",reply_markup=dar_keyboardMenuPrincipal())
+                await message.answer("Successful Payment 🚀", reply_markup=dar_keyboardMenuPrincipal())
                 await state.finish()
             else:
                 await message.answer("Failed Payment ‼️", reply_markup=dar_keyboardMenuPrincipal())
@@ -597,9 +630,13 @@ async def process_aceptacion(message: types.Message, state: FSMContext):
                                      "\n📌 without internet connection"
                                      "\n📌 Amount less than your balance")
                 await state.finish()
+        else:
+            await state.finish()
+            await message.answer("Invalid password error !!",reply_markup=dar_keyboardMenuPrincipal())
     else:
-        if message.text == "Accept":
-            tmpStellar  = Stellar(pLlave=resultado[1],sLlave=resultado[2],horizon=RedStellar)
+        sllave = s.desEncriptarLlaveSecreta(data['contrasena'], resultado[2].encode())
+        if sllave != False:
+            tmpStellar  = Stellar(pLlave=resultado[1],sLlave=sllave.decode(),horizon=RedStellar)
             pago = tmpStellar.pagoConMemo(Destino=data['direccion'],monto=data['monto'],memo=data['memoAceptacion'])
             if pago[0]:
                 await message.answer("Successful Payment 🚀",reply_markup=dar_keyboardMenuPrincipal())
@@ -610,6 +647,10 @@ async def process_aceptacion(message: types.Message, state: FSMContext):
                                      "\n📌 without internet connection"
                                      "\n📌 Amount less than your balance")
                 await state.finish()
+        else:
+            await state.finish()
+            await message.answer("Invalid password error !!", reply_markup=dar_keyboardMenuPrincipal())
+
 
 #endregion
 
@@ -1182,6 +1223,78 @@ async def paso_aceptacionAssets(message: types.Message, state: FSMContext):
         await state.reset_data()
         await FormularioAssetsMenu.seleccionMenuAssets.set()
         await message.answer("Cancel Pay Assets", reply_markup=dar_keyboardAssets())
+
+
+
+#endregion
+
+
+#region MaquinaEncriptarLlaveSecreta
+@dp.message_handler(Text(equals='Cancel', ignore_case=True), state=FormularioEncriptacion)
+async def cancel_handler(message: types.Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state is None:
+        return
+    await state.finish()
+    await message.answer("Canceling encryption process secret key",reply_markup=dar_keyboardMenuPrincipal())
+
+@dp.message_handler(content_types=ContentType.TEXT,state=FormularioEncriptacion.GuadarContrasena)
+async def paso_GuardarContrasena(message: types.Message, state: FSMContext):
+    async  with state.proxy() as data:
+        data['contrasena']= message.text
+        print(data['contrasena'])
+    await message.delete()
+    await message.answer("Do you want to use this password?",reply_markup=dar_keyboardSiNo())
+    await FormularioEncriptacion.next()
+
+@dp.message_handler(content_types=ContentType.TEXT,state=FormularioEncriptacion.Aceptacion)
+async def paso_Aceptacion(message: types.Message, state: FSMContext):
+    if message.text == "Yes":
+        async with state.proxy() as data:
+            pass
+        c = Conexion()
+        c.encriptarSecretKeyCuentaBD(message.from_user.id,data['contrasena'])
+        await state.finish()
+        await message.answer("Congratulations, your secret key is already encrypted !!",reply_markup=dar_keyboardMenuPrincipal())
+    elif message.text == "No":
+        await FormularioEncriptacion.GuadarContrasena.set()
+        await message.answer("Enter another password:",reply_markup=dar_keyboardCancelarMaquina())
+    else:
+        await message.answer("Select a keyboard option")
+
+
+#endregion
+
+#Region MaquinaDesEncriptarLlaveSecreta
+
+@dp.message_handler(Text(equals='Cancel', ignore_case=True), state=FormularioDesencriptarLlave)
+async def cancel_handler(message: types.Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state is None:
+        return
+    await state.finish()
+    await message.answer("Canceling the secret Wallet decryption process",reply_markup=dar_keyboardMenuPrincipal())
+
+@dp.message_handler(content_types=ContentType.TEXT,state=FormularioDesencriptarLlave.GuardarLlaveEncriptada)
+async def paso_GuardarLlave(message: types.Message, state: FSMContext):
+    async  with state.proxy() as data:
+        data['sLlave']= message.text
+    await FormularioDesencriptarLlave.next()
+    await message.answer("Enter your password")
+
+@dp.message_handler(content_types=ContentType.TEXT,state=FormularioDesencriptarLlave.Desencriptar)
+async def paso_Descriptar(message: types.Message, state: FSMContext):
+    async  with state.proxy() as data:
+        data['clave']= message.text
+    await message.delete()
+    s = Seguridad()
+    resultado = s.desEncriptarLlaveSecreta(data['clave'],data['sLlave'].encode())
+    if resultado:
+        await state.finish()
+        await message.answer(resultado.decode()+"\nNote: We recommend deleting this message !!",reply_markup=dar_keyboardMenuPrincipal())
+    else:
+        await state.finish()
+        await message.answer("Invalid password error !!",reply_markup=dar_keyboardMenuPrincipal())
 
 
 
