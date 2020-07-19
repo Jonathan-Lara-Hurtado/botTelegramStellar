@@ -371,7 +371,7 @@ class Conexion:
         llaves = self.generarPar()
         c = self.conexion.cursor()
         valores = [(usuario,llaves[0],llaves[1])]
-        c.executemany('Insert Into billeteras values (?,?,?)',valores)
+        c.executemany('Insert Into billeteras(idTelegram,pllave,sllave) values (?,?,?)',valores)
         self.conexion.commit()
 
     def misDatos(self,usuario):
