@@ -1,2 +1,2 @@
-# Repositorio Stellar bot Telegram(Desarollo).
+# Repositorio Stellar bot Telegram.
 --
