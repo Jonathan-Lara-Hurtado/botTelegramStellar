@@ -3,6 +3,7 @@
 
 
 #region configEncuesta
+from BaseDatos import BaseDatos
 from ConectorEncuesta import verificarVoto,ConexionEncuesta,jsonDireccionPregunta
 from ConectorAssets import ConexionAssets
 from Encriptacion import Seguridad
@@ -1301,4 +1302,6 @@ async def paso_Descriptar(message: types.Message, state: FSMContext):
 #endregion
 
 if __name__ == '__main__':
+    c = BaseDatos()
+    c.actualizaciones()
     executor.start_polling(dp, skip_updates=True)
