@@ -1243,7 +1243,6 @@ async def cancel_handler(message: types.Message, state: FSMContext):
 async def paso_GuardarContrasena(message: types.Message, state: FSMContext):
     async  with state.proxy() as data:
         data['contrasena']= message.text
-        print(data['contrasena'])
     await message.delete()
     await message.answer("Do you want to use this password?",reply_markup=dar_keyboardSiNo())
     await FormularioEncriptacion.next()
