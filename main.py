@@ -3,6 +3,7 @@
 
 
 #region configEncuesta
+from BaseDatos import BaseDatos
 from ConectorEncuesta import verificarVoto,ConexionEncuesta,jsonDireccionPregunta
 from ConectorAssets import ConexionAssets
 from Encriptacion import Seguridad
@@ -1242,7 +1243,6 @@ async def cancel_handler(message: types.Message, state: FSMContext):
 async def paso_GuardarContrasena(message: types.Message, state: FSMContext):
     async  with state.proxy() as data:
         data['contrasena']= message.text
-        print(data['contrasena'])
     await message.delete()
     await message.answer("Do you want to use this password?",reply_markup=dar_keyboardSiNo())
     await FormularioEncriptacion.next()
@@ -1301,4 +1301,6 @@ async def paso_Descriptar(message: types.Message, state: FSMContext):
 #endregion
 
 if __name__ == '__main__':
+    c = BaseDatos()
+    c.actualizaciones()
     executor.start_polling(dp, skip_updates=True)
